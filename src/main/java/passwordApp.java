@@ -1,9 +1,6 @@
 import org.w3c.dom.ls.LSOutput;
 
-import javax.crypto.AEADBadTagException;
-import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
+import javax.crypto.*;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -412,6 +409,160 @@ public final class passwordApp {
             return out;
         }
     }
+    static final class Totp {
+        static final int STEP_SECONDS = 30;
+        static final int DIGITS = 6;
+
+        static String generateCode(byte[] secretBytes, long epochSeconds) throws GeneralSecurityException {
+            long counter = epochSeconds / STEP_SECONDS;
+            byte[] counterBytes = new byte[8];
+            for (int i = 7; i >= 0; i--) {
+                counterBytes[i] = (byte) (counter & 0xFF);
+                counter >>>= 8;
+            }
+            Mac mac = Mac.getInstance("HmacSHA1");
+            mac.init(new SecretKeySpec(secretBytes, "HmacSHA1"));
+            byte[] hash = mac.doFinal(counterBytes);
+
+            int offset = hash[hash.length - 1] & 0x0F;
+            int binary = ((hash[offset] & 0x7F) << 24)
+                    | ((hash[offset + 1] & 0xFF) << 16)
+                    | ((hash[offset + 2] & 0xFF) << 8)
+                    | (hash[offset + 3] & 0xFF);
+            int code = binary % (int) Math.pow(10, DIGITS);
+            return String.format("%0" + DIGITS + "d", code);
+        }
+
+        static int secondsRemaining(long epochSeconds) {
+            return STEP_SECONDS - (int) (epochSeconds % STEP_SECONDS);
+        }
+    }
+
+    // =========================================================================
+    // PasswordGenerator - SecureRandom-backed, guarantees category coverage,
+    // then shuffles so category order isn't predictable.
+    // =========================================================================
+
+    static final class PasswordGenerator {
+        private static final String LOWER = "abcdefghijklmnopqrstuvwxyz";
+        private static final String UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        private static final String DIGITS = "0123456789";
+        private static final String SYMBOLS = "!@#$%^&*()-_=+[]{};:,.<>?/";
+        private static final String AMBIGUOUS = "0O1lI";
+
+        static char[] generate(int length, boolean lower, boolean upper, boolean digits,
+                               boolean symbols, boolean noAmbiguous) {
+            List<String> categories = new ArrayList<>();
+            if (lower) categories.add(strip(LOWER, noAmbiguous));
+            if (upper) categories.add(strip(UPPER, noAmbiguous));
+            if (digits) categories.add(strip(DIGITS, noAmbiguous));
+            if (symbols) categories.add(strip(SYMBOLS, noAmbiguous));
+            if (categories.isEmpty()) categories.add(strip(LOWER, noAmbiguous));
+
+            StringBuilder poolBuilder = new StringBuilder();
+            for (String c : categories) poolBuilder.append(c);
+            String fullPool = poolBuilder.toString();
+
+            SecureRandom random = new SecureRandom();
+            char[] result = new char[Math.max(length, categories.size())];
+
+            int idx = 0;
+            for (String cat : categories) {
+                // nextInt(bound) does unbiased rejection sampling internally -
+                // deliberately not using nextInt() % bound, which skews low.
+                result[idx++] = cat.charAt(random.nextInt(cat.length()));
+            }
+            for (; idx < result.length; idx++) {
+                result[idx] = fullPool.charAt(random.nextInt(fullPool.length()));
+            }
+
+            for (int i = result.length - 1; i > 0; i--) {
+                int j = random.nextInt(i + 1);
+                char tmp = result[i];
+                result[i] = result[j];
+                result[j] = tmp;
+            }
+            return result;
+        }
+
+        static double estimateBits(int length, boolean lower, boolean upper, boolean digits, boolean symbols) {
+            int poolSize = 0;
+            if (lower) poolSize += 26;
+            if (upper) poolSize += 26;
+            if (digits) poolSize += 10;
+            if (symbols) poolSize += SYMBOLS.length();
+            if (poolSize == 0) poolSize = 26;
+            return length * (Math.log(poolSize) / Math.log(2));
+        }
+
+        private static String strip(String set, boolean noAmbiguous) {
+            if (!noAmbiguous) return set;
+            StringBuilder sb = new StringBuilder();
+            for (char c : set.toCharArray()) {
+                if (AMBIGUOUS.indexOf(c) < 0) sb.append(c);
+            }
+            return sb.toString();
+        }
+    }
+    static final class PasswordStrength {
+        // A representative slice of top leaked passwords, not an exhaustive
+        // list - see STDLIB.md/README for the honest scope of this check.
+        private static final Set<String> COMMON = Set.of(
+                "password", "123456", "12345678", "qwerty", "letmein", "admin", "welcome",
+                "monkey", "dragon", "111111", "password1", "iloveyou", "abc123", "123456789",
+                "sunshine", "princess", "football", "master", "login", "solo", "shadow",
+                "michael", "superman", "batman", "trustno1", "hello", "freedom", "whatever",
+                "starwars", "888888", "121212", "qwerty123", "1q2w3e4r", "000000"
+        );
+
+        static String assess(char[] password) {
+            // The one deliberate exception to "never String for secrets" in
+            // this codebase: a Set<String> lookup needs a String, and this
+            // is a narrow, disclosed tradeoff for a non-secret-storage path.
+            String joined = new String(password).toLowerCase(Locale.ROOT);
+            if (COMMON.contains(joined)) {
+                return "weak (this is one of the most commonly leaked passwords)";
+            }
+
+            boolean hasLower = false, hasUpper = false, hasDigit = false, hasSymbol = false;
+            for (char c : password) {
+                if (Character.isLowerCase(c)) hasLower = true;
+                else if (Character.isUpperCase(c)) hasUpper = true;
+                else if (Character.isDigit(c)) hasDigit = true;
+                else hasSymbol = true;
+            }
+            double bits = PasswordGenerator.estimateBits(password.length, hasLower, hasUpper, hasDigit, hasSymbol);
+
+            String band;
+            if (bits < 35) band = "weak";
+            else if (bits < 60) band = "fair";
+            else if (bits < 90) band = "strong";
+            else band = "excellent";
+
+            return String.format("%s (~%.0f bits of entropy)", band, bits);
+        }
+    }
+
+    // =========================================================================
+    // ClipboardUtil - best-effort. Deliberately catches broadly (Throwable)
+    // because AWT's HeadlessException and related failures on servers /
+    // CI / some WSL setups are exactly the kind of thing that should
+    // degrade gracefully, not crash the tool - unlike everywhere else in
+    // this codebase, which catches specific exception types on purpose.
+    // =========================================================================
+
+    static final class ClipboardUtil {
+        static boolean copy(String text) {
+            try {
+                java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
+                clipboard.setContents(new java.awt.datatransfer.StringSelection(text), null);
+                return true;
+            } catch (Throwable t) {
+                return false;
+            }
+        }
+    }
+
 
 
 
