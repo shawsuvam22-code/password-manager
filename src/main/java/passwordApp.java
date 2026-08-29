@@ -438,11 +438,6 @@ public final class passwordApp {
         }
     }
 
-    // =========================================================================
-    // PasswordGenerator - SecureRandom-backed, guarantees category coverage,
-    // then shuffles so category order isn't predictable.
-    // =========================================================================
-
     static final class PasswordGenerator {
         private static final String LOWER = "abcdefghijklmnopqrstuvwxyz";
         private static final String UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -542,14 +537,6 @@ public final class passwordApp {
             return String.format("%s (~%.0f bits of entropy)", band, bits);
         }
     }
-
-    // =========================================================================
-    // ClipboardUtil - best-effort. Deliberately catches broadly (Throwable)
-    // because AWT's HeadlessException and related failures on servers /
-    // CI / some WSL setups are exactly the kind of thing that should
-    // degrade gracefully, not crash the tool - unlike everywhere else in
-    // this codebase, which catches specific exception types on purpose.
-    // =========================================================================
 
     static final class ClipboardUtil {
         static boolean copy(String text) {
