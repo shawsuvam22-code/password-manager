@@ -8,13 +8,11 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.sql.SQLOutput;
+import java.time.Instant;
 import java.util.*;
 
 public final class passwordApp {
@@ -463,8 +461,6 @@ public final class passwordApp {
 
             int idx = 0;
             for (String cat : categories) {
-                // nextInt(bound) does unbiased rejection sampling internally -
-                // deliberately not using nextInt() % bound, which skews low.
                 result[idx++] = cat.charAt(random.nextInt(cat.length()));
             }
             for (; idx < result.length; idx++) {
@@ -500,8 +496,7 @@ public final class passwordApp {
         }
     }
     static final class PasswordStrength {
-        // A representative slice of top leaked passwords, not an exhaustive
-        // list - see STDLIB.md/README for the honest scope of this check.
+
         private static final Set<String> COMMON = Set.of(
                 "password", "123456", "12345678", "qwerty", "letmein", "admin", "welcome",
                 "monkey", "dragon", "111111", "password1", "iloveyou", "abc123", "123456789",
@@ -511,9 +506,6 @@ public final class passwordApp {
         );
 
         static String assess(char[] password) {
-            // The one deliberate exception to "never String for secrets" in
-            // this codebase: a Set<String> lookup needs a String, and this
-            // is a narrow, disclosed tradeoff for a non-secret-storage path.
             String joined = new String(password).toLowerCase(Locale.ROOT);
             if (COMMON.contains(joined)) {
                 return "weak (this is one of the most commonly leaked passwords)";
@@ -548,6 +540,305 @@ public final class passwordApp {
                 return false;
             }
         }
+        static final class Cli {
+
+            static void run(String[] args) throws Exception {
+                if (args.length == 0) {
+                    printUsage();
+                    throw new CliError("no command given", 4);
+                }
+                String command = args[0];
+                String[] rest = Arrays.copyOfRange(args, 1, args.length);
+                switch (command) {
+                    case "init" -> cmdInit(rest);
+                    case "add" -> cmdAdd(rest);
+                    case "get" -> cmdGet(rest);
+                    case "list" -> cmdList(rest);
+                    case "remove" -> cmdRemove(rest);
+                    case "totp" -> cmdTotp(rest);
+                    case "generate" -> cmdGenerate(rest);
+                    case "passwd" -> cmdPasswd(rest);
+                    case "help", "--help", "-h" -> printUsage();
+                    default -> throw new CliError("unknown command '" + command + "' (try 'help')", 4);
+                }
+            }
+
+            private static void cmdInit(String[] args) throws Exception {
+                Path vp = vaultPath(args);
+                Path bp = backupVaultPath(args);
+                char[] pw1 = readPassword("Set master password: ");
+                char[] pw2 = readPassword("Confirm master password: ");
+                if (!Arrays.equals(pw1, pw2)) {
+                    Arrays.fill(pw1, (char) 0);
+                    Arrays.fill(pw2, (char) 0);
+                    throw new CliError("passwords did not match", 4);
+                }
+                Arrays.fill(pw2, (char) 0);
+                Vault.create(vp, bp, pw1, hasFlag(args, "--force"));
+                Arrays.fill(pw1, (char) 0);
+                System.out.println("vault created at " + vp
+                        + (bp != null ? " (backup copy at " + bp + ")"
+                        : " (no backup copy - omit --no-backup, or set --backup-vault PATH, to enable one)"));
+            }
+
+            private static void cmdAdd(String[] args) throws Exception {
+                if (args.length == 0) {
+                    throw new CliError(
+                            "usage: add <site> [--user NAME] [--notes TEXT] [--generate] [--length N]", 4);
+                }
+                String site = args[0];
+                String user = getFlag(args, "--user", null);
+                String notes = getFlag(args, "--notes", "");
+
+                char[] master = readPassword("Master password: ");
+                Vault vault = Vault.open(vaultPath(args), backupVaultPath(args), master);
+                Arrays.fill(master, (char) 0);
+
+                boolean generated = hasFlag(args, "--generate");
+                char[] entryPassword;
+                if (generated) {
+                    int length = Integer.parseInt(getFlag(args, "--length", "20"));
+                    entryPassword = PasswordGenerator.generate(length, true, true, true, true, hasFlag(args, "--no-ambiguous"));
+                } else {
+                    entryPassword = readPassword("Password for " + site + ": ");
+                }
+
+                vault.addEntry(new VaultEntry(site, user, entryPassword, notes, Instant.now().getEpochSecond(), null));
+                vault.save();
+                System.out.println("saved entry for " + site);
+
+                if (generated) {
+                    System.out.println("generated: " + new String(entryPassword));
+                    System.out.println("strength: " + PasswordStrength.assess(entryPassword));
+                }
+                Arrays.fill(entryPassword, (char) 0);
+            }
+
+            private static void cmdGet(String[] args) throws Exception {
+                if (args.length == 0) {
+                    throw new CliError("usage: get <site> [--show] [--clear-after SECONDS]", 4);
+                }
+                String site = args[0];
+                boolean show = hasFlag(args, "--show");
+
+                char[] master = readPassword("Master password: ");
+                Vault vault = Vault.open(vaultPath(args), backupVaultPath(args), master);
+                Arrays.fill(master, (char) 0);
+
+                VaultEntry entry = vault.getEntry(site).orElseThrow(() -> new CliError("no entry for '" + site + "'", 4));
+
+                if (show) {
+                    System.out.println("username: " + (entry.username() == null ? "(none)" : entry.username()));
+                    System.out.println("password: " + new String(entry.password()));
+                    return;
+                }
+
+                boolean copied = ClipboardUtil.copy(new String(entry.password()));
+                if (!copied) {
+                    System.out.println("clipboard unavailable in this environment; password: " + new String(entry.password()));
+                    return;
+                }
+                int clearAfter = Integer.parseInt(getFlag(args, "--clear-after", "10"));
+                System.out.println("password copied to clipboard, clearing in " + clearAfter + "s...");
+                Thread.sleep(clearAfter * 1000L);
+                ClipboardUtil.copy("");
+                System.out.println("clipboard cleared");
+            }
+
+            private static void cmdList(String[] args) throws Exception {
+                String filter = getFlag(args, "--filter", null);
+                char[] master = readPassword("Master password: ");
+                Vault vault = Vault.open(vaultPath(args), backupVaultPath(args), master);
+                Arrays.fill(master, (char) 0);
+
+                List<VaultEntry> entries = vault.listEntries(filter);
+                if (entries.isEmpty()) {
+                    System.out.println("(no entries)");
+                    return;
+                }
+                for (VaultEntry e : entries) {
+                    System.out.println(e.site() + (e.totpSecret() != null ? "  [2FA]" : ""));
+                }
+            }
+
+            private static void cmdRemove(String[] args) throws Exception {
+                if (args.length == 0) {
+                    throw new CliError("usage: remove <site> [--yes]", 4);
+                }
+                String site = args[0];
+                if (!hasFlag(args, "--yes")) {
+                    System.out.print("remove '" + site + "'? type 'yes' to confirm: ");
+                    System.out.flush();
+                    BufferedReader r = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+                    String answer = r.readLine();
+                    if (!"yes".equalsIgnoreCase(answer == null ? "" : answer.trim())) {
+                        System.out.println("cancelled");
+                        return;
+                    }
+                }
+                char[] master = readPassword("Master password: ");
+                Vault vault = Vault.open(vaultPath(args), backupVaultPath(args), master);
+                Arrays.fill(master, (char) 0);
+
+                if (vault.removeEntry(site)) {
+                    vault.save();
+                    System.out.println("removed " + site);
+                } else {
+                    throw new CliError("no entry for '" + site + "'", 4);
+                }
+            }
+
+            private static void cmdTotp(String[] args) throws Exception {
+                if (args.length == 0) {
+                    throw new CliError("usage: totp <add|code> ...", 4);
+                }
+                String sub = args[0];
+                String[] rest = Arrays.copyOfRange(args, 1, args.length);
+
+                if (sub.equals("add")) {
+                    if (rest.length < 2) {
+                        throw new CliError("usage: totp add <site> <base32-secret>", 4);
+                    }
+                    String site = rest[0];
+                    String secret = rest[1].toUpperCase(Locale.ROOT).replace(" ", "");
+                    Base32.decode(secret); // validate it decodes without throwing
+
+                    char[] master = readPassword("Master password: ");
+                    Vault vault = Vault.open(vaultPath(rest), backupVaultPath(rest), master);
+                    Arrays.fill(master, (char) 0);
+
+                    vault.setTotpSecret(site, secret);
+                    vault.save();
+                    System.out.println("TOTP secret saved for " + site);
+
+                } else if (sub.equals("code")) {
+                    if (rest.length < 1) {
+                        throw new CliError("usage: totp code <site>", 4);
+                    }
+                    String site = rest[0];
+                    char[] master = readPassword("Master password: ");
+                    Vault vault = Vault.open(vaultPath(rest), backupVaultPath(rest), master);
+                    Arrays.fill(master, (char) 0);
+
+                    VaultEntry entry = vault.getEntry(site).orElseThrow(() -> new CliError("no entry for '" + site + "'", 4));
+                    if (entry.totpSecret() == null) {
+                        throw new CliError("no TOTP secret registered for '" + site + "' - use 'totp add' first", 4);
+                    }
+                    byte[] secretBytes = Base32.decode(entry.totpSecret());
+                    long now = Instant.now().getEpochSecond();
+                    String code = Totp.generateCode(secretBytes, now);
+                    System.out.println(code + "  (refreshes in " + Totp.secondsRemaining(now) + "s)");
+
+                } else {
+                    throw new CliError("unknown totp subcommand '" + sub + "'", 4);
+                }
+            }
+
+            private static void cmdGenerate(String[] args) {
+                int length = Integer.parseInt(getFlag(args, "--length", "20"));
+                boolean noAmbiguous = hasFlag(args, "--no-ambiguous");
+                char[] pw = PasswordGenerator.generate(length, true, true, true, true, noAmbiguous);
+                System.out.println(new String(pw));
+                System.out.println("strength: " + PasswordStrength.assess(pw));
+                Arrays.fill(pw, (char) 0);
+            }
+
+            private static void cmdPasswd(String[] args) throws Exception {
+                char[] oldMaster = readPassword("Current master password: ");
+                Vault vault = Vault.open(vaultPath(args), backupVaultPath(args), oldMaster);
+                Arrays.fill(oldMaster, (char) 0);
+
+                char[] newMaster1 = readPassword("New master password: ");
+                char[] newMaster2 = readPassword("Confirm new master password: ");
+                if (!Arrays.equals(newMaster1, newMaster2)) {
+                    Arrays.fill(newMaster1, (char) 0);
+                    Arrays.fill(newMaster2, (char) 0);
+                    throw new CliError("passwords did not match", 4);
+                }
+                Arrays.fill(newMaster2, (char) 0);
+                vault.rekey(newMaster1);
+                Arrays.fill(newMaster1, (char) 0);
+                System.out.println("master password updated");
+            }
+
+            private static Path vaultPath(String[] args) {
+                String custom = getFlag(args, "--vault", null);
+                if (custom != null) {
+                    return Paths.get(custom);
+                }
+                return Paths.get(System.getProperty("user.home"), ".vaultic", "vault.dat");
+            }
+
+            private static Path backupVaultPath(String[] args) {
+                if (hasFlag(args, "--no-backup")) {
+                    return null;
+                }
+                String custom = getFlag(args, "--backup-vault", null);
+                if (custom != null) {
+                    return Paths.get(custom);
+                }
+
+                return Paths.get(System.getProperty("user.home"), ".vaultic-backup", "vault.dat");
+            }
+
+            private static String getFlag(String[] args, String name, String defaultValue) {
+                for (int i = 0; i < args.length; i++) {
+                    if (args[i].equals(name) && i + 1 < args.length) {
+                        return args[i + 1];
+                    }
+                }
+                return defaultValue;
+            }
+
+            private static boolean hasFlag(String[] args, String name) {
+                for (String a : args) {
+                    if (a.equals(name)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            private static char[] readPassword(String prompt) throws IOException {
+                Console console = System.console();
+                if (console != null) {
+                    return console.readPassword(prompt);
+                }
+
+                System.out.print(prompt + "(no console detected, input will be visible) ");
+                System.out.flush();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+                String line = reader.readLine();
+                return line == null ? new char[0] : line.toCharArray();
+            }
+
+            private static void printUsage() {
+                System.out.println("""
+                    vaultic - offline password manager with built-in TOTP (2FA) codes
+
+                    usage:
+                      vaultic init [--force]
+                      vaultic add <site> [--user U] [--notes N] [--generate] [--length N] [--no-ambiguous]
+                      vaultic get <site> [--show] [--clear-after SECONDS]
+                      vaultic list [--filter TEXT]
+                      vaultic remove <site> [--yes]
+                      vaultic totp add <site> <base32-secret>
+                      vaultic totp code <site>
+                      vaultic generate [--length N] [--no-ambiguous]
+                      vaultic passwd
+
+                    global flags (any command):
+                      --vault PATH           primary vault location (default: ~/.vaultic/vault.dat)
+                      --backup-vault PATH    redundant copy location (default: ~/.vaultic-backup/vault.dat)
+                      --no-backup            disable the backup copy entirely
+
+                    note: the default backup lives on the same disk, so it only protects against
+                    deleting one folder by accident. For real protection against a drive failure,
+                    point --backup-vault at a different physical drive or a cloud-synced folder.
+                    """);
+            }
+        }
+    }
     }
 
 
@@ -555,4 +846,4 @@ public final class passwordApp {
 
 
 
-}
+
