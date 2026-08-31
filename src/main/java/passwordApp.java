@@ -18,6 +18,15 @@ import java.util.*;
 public final class passwordApp {
 
     public static void main(String[] args) {
+        try {
+            ClipboardUtil.Cli.run(args);
+        } catch (CliError e) {
+            System.err.println("error: " + e.getMessage());
+            System.exit(e.exitCode);
+        } catch (Exception e) {
+            System.err.println("unexpected error: " + e.getMessage());
+            System.exit(1);
+        }
     }
     static final class CliError extends Exception {
         final int exitCode;
