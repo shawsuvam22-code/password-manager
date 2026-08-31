@@ -190,12 +190,63 @@ Fast serialization - Custom binary format, not JSON/XML
 
 📖 Complete Command Reference
 Global Flags
-Flag	Description	Default
---vault PATH	Primary vault location	~/.vaultic/vault.dat
---backup-vault PATH	Backup location	~/.vaultic-backup/vault.dat
---no-backup	Disable backup	Off
+|Flag	|Description	|Default|
+|:------------|:-----------------|:----------------------|
+|--vault PATH|	Primary vault location|	~/.vaultic/vault.dat|
+|--backup-vault PATH|	Backup location|	~/.vaultic-backup/vault.dat|
+|--no-backup|	Disable backup|	Off|
 
 # Commands
 
-##
+**Show help / Show all the commands**
+* `java passwordApp help`
+
+**Initialize vault**
+* `java passwordApp init`
+
+**Add an entry with generated password**
+* `java passwordApp add <entry name> --user <user id> --generate`
+
+**Add an entry with your own password**
+* `java passwordApp add <entry name> --user <user id>`
+
+**List all entries**
+* `java passwordApp list`
+
+**List entries with filter**
+* `java passwordApp list --filter <keyword>`
+
+**Get a password (copies to clipboard)**
+* `java passwordApp get <entry name>`
+
+**Get a password and show on screen**
+* `java passwordApp get <entry name> --show`
+
+**Get password with custom clipboard clear time**
+* `java passwordApp get <entry name> --clear-after <time>`
+
+**Remove an entry**
+* `java passwordApp remove <entry name> --yes`
+
+**Generate a random password**
+* `java passwordApp generate --length <size>`
+
+**Generate password without ambiguous characters**
+* `java passwordApp generate --length <size> --no-ambiguous`
+
+**Change master password**
+* `java passwordApp passwd`
+
+**Add TOTP secret to an entry**
+* `java passwordApp totp add <entry name> JBSWY3DPEHPK3PXP`
+
+**Generate TOTP code**
+* `java passwordApp totp code <entry name>`
+
+**Use custom vault location**
+* `java passwordApp --vault <custom location>`
+* `java passwordApp --vault <custom location>`
+
+**Change master password**
+* `java passwordApp passwd`
 
