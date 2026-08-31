@@ -16,6 +16,41 @@ Vaultic is a command-line password manager built entirely in Java with no extern
 
 🏗️ Atomic Operations - No vault corruption, even during power loss
 
+
+# Working 
+
+## 1. Cryptography & Security Architecture
+Vaultic uses modern cryptographic primitives to ensure your data is secure both on disk and in memory:
+
+Key Derivation: When you enter your master password, Vaultic derives a 256-bit encryption key using PBKDF2WithHmacSHA256. It uses a robust 600,000 iterations combined with a 16-byte randomly generated salt, making brute-force and dictionary attacks computationally unfeasible.
+
+Encryption: The vault payload is encrypted using AES-256 in GCM (Galois/Counter Mode). GCM is an authenticated encryption mode; it not only encrypts the data but attaches a 128-bit authentication tag to ensure the file has not been tampered with.
+
+Memory Management: Java typically leaves strings in memory until garbage collection occurs. Vaultic strictly uses char[] and byte[] arrays for sensitive data, actively overwriting them with zeros (Arrays.fill(data, (byte) 0)) immediately after the operation completes.
+
+## 2. Vault Storage Format
+Vaultic does not store data in plaintext JSON or XML. It uses a highly efficient, custom binary serialization format. The .dat file is structured as follows:
+
+Magic Header (ZDV1): 4 bytes identifying the file as a valid Vaultic file.
+
+Version Byte: Ensures backward/forward compatibility.
+
+Salt (16 bytes): Used to derive the key from your password.
+
+IV (12 bytes): A fresh Initialization Vector generated for every single save.
+
+Ciphertext: The AES-GCM encrypted payload containing your actual entries (sites, usernames, passwords, notes, and TOTP secrets).
+
+## 3. Save Mechanism & Backups
+Vaultic employs a dual-save, atomic write system to prevent data loss:
+
+Atomic Writes: When saving changes, data is first written to a .tmp file. Once the write is completely successful, it is atomically swapped with the main vault.dat file. If your computer loses power mid-save, your original vault remains intact.
+
+Auto-Healing Backup: By default, every successful save is mirrored to a secondary backup directory (~/.vaultic-backup/). If you accidentally delete or corrupt your primary vault, running any Vaultic command will seamlessly recover the data from the backup.
+
+## 4. TOTP Engine
+The 2FA system does not rely on third-party libraries. It decodes standard Base32 secrets (commonly provided as QR codes or text strings by websites) into raw bytes. It then generates a standard RFC 6238 compliant 6-digit code by applying an HMAC-SHA1 hash over the current Unix timestamp divided by 30-second intervals.
+
 # 🎯 Key Advantages
 
 ## 1. 🔄 Self-Healing Backup System
