@@ -223,13 +223,23 @@ Bounds checking - Prevents memory issues (10MB limit)
 
 Fast serialization - Custom binary format, not JSON/XML
 
-📖 Complete Command Reference
+## 📖 Complete Command Reference
 Global Flags
 |Flag	|Description	|Default|
 |:------------|:-----------------|:----------------------|
 |--vault PATH|	Primary vault location|	~/.vaultic/vault.dat|
 |--backup-vault PATH|	Backup location|	~/.vaultic-backup/vault.dat|
 |--no-backup|	Disable backup|	Off|
+
+
+# how to Run
+
+ copy the code in a `passwordApp.java` folder created locally on notepad
+
+ run the command `cd "[location of the folder]"` in terminal
+
+ compile it using `javac -d . passwordApp.java` in terminal and perform the commands shown below.
+
 
 # Commands
 
