@@ -18,7 +18,7 @@ Vaultic is a command-line password manager built entirely in Java with no extern
 
 # 🎯 Key Advantages
 
-# 1. 🔄 Self-Healing Backup System
+## 1. 🔄 Self-Healing Backup System
 The most unique feature of Vaultic is its automatic recovery mechanism:
 
 Primary Vault Lost? → Automatic Recovery from Backup → Seamless Restoration
@@ -42,7 +42,7 @@ warning: primary vault unavailable (no vault found at ~/.vaultic/vault.dat)
 primary vault restored from backup.
 password copied to clipboard
 
-# 2. 🔐 Military-Grade Security
+## 2. 🔐 Military-Grade Security
 Encryption Pipeline:
 
 text
@@ -69,7 +69,7 @@ Memory zeroing - All passwords cleared from RAM after use
 
 No master password storage - Never persisted, never transmitted
 
-# 3. 📦 Zero Dependencies
+## 3. 📦 Zero Dependencies
 Unlike other password managers:
 
 Tool	Dependencies	Size
@@ -87,7 +87,7 @@ Portable - runs anywhere Java runs
 
 Fast compilation and startup
 
-# 4. 💾 Atomic Operations = No Corruption
+## 4. 💾 Atomic Operations = No Corruption
 Atomic Write Process:
 
 1. Write encrypted data to temporary file (.tmp)
@@ -104,7 +104,7 @@ Concurrent access
 
 System crashes
 
-# 5. 🔑 TOTP 2FA Integration
+## 5. 🔑 TOTP 2FA Integration
 Unique among offline password managers:
 
  Store TOTP secret
@@ -126,7 +126,7 @@ No internet required
 
 Works offline completely
 
-# 6. 🎲 Advanced Password Generator
+## 6. 🎲 Advanced Password Generator
 Guarantees:
 
 At least one character from each selected character set
@@ -143,7 +143,7 @@ $ java passwordApp generate --length 24 --no-ambiguous
 Generated: XkP9$mRq#2wVn@8jHx&3pLz
 Strength: strong (~89 bits of entropy)
 
-# 7. 🧠 Smart Clipboard Management
+## 7. 🧠 Smart Clipboard Management
 Clipboard Security Flow:
 
 Password Retrieved → Copied to Clipboard → Auto-Cleared (10s)
@@ -157,7 +157,7 @@ Clears by setting empty content
 
 Notifies user throughout process
 
-# 8. 🏗️ Architecture Benefits
+## 8. 🏗️ Architecture Benefits
 Single Responsibility Design:
 
 ## passwordApp.java
@@ -177,7 +177,7 @@ Clear separation of concerns
 
 Type-safe with records
 
-# 9. 🚀 Performance Optimizations
+## 9. 🚀 Performance Optimizations
 Efficient Operations:
 
 Lazy decryption - Only decrypts when needed
@@ -250,3 +250,30 @@ Global Flags
 **Change master password**
 * `java passwordApp passwd`
 
+
+# ⚠️ Critical Limitations
+
+## 1. Vault File Manipulation
+
+Anyone can edit/delete the vault file
+- No file integrity protection
+- No digital signatures
+- File can be corrupted intentionally or accidentally
+- No way to detect tampering
+- Backup also can be deleted simultaneously
+## 2. Forgotten Master Password
+
+**No recovery option**
+- No password hint
+- No security questions
+- No recovery email
+- No backup codes
+- Master password = ONLY key
+- If forgotten, ALL data is permanently LOST
+## 3. No Folder/File Locking
+
+ Vault files are NOT protected at OS level
+- Anyone with access can read/delete .vaultic folder
+- No file encryption at rest (only content is encrypted)
+- No folder permissions
+- No anti-tamper protection
