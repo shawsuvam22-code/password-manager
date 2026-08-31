@@ -1,7 +1,8 @@
-Overview
+# Overview
+
 Vaultic is a command-line password manager built entirely in Java with no external libraries. It features a unique self-healing backup system that automatically restores your vault if the primary copy is lost—protecting you from accidental deletions and file corruption.
 
-Why Vaultic Stands Out:
+# Why Vaultic Stands Out:
 
 🛡️ Self-Healing - Automatic recovery from backup if primary is lost
 
@@ -15,9 +16,9 @@ Why Vaultic Stands Out:
 
 🏗️ Atomic Operations - No vault corruption, even during power loss
 
-🎯 Key Advantages
+# 🎯 Key Advantages
 
-1. 🔄 Self-Healing Backup System
+# 1. 🔄 Self-Healing Backup System
 The most unique feature of Vaultic is its automatic recovery mechanism:
 
 Primary Vault Lost? → Automatic Recovery from Backup → Seamless Restoration
@@ -41,7 +42,7 @@ warning: primary vault unavailable (no vault found at ~/.vaultic/vault.dat)
 primary vault restored from backup.
 password copied to clipboard
 
-2. 🔐 Military-Grade Security
+# 2. 🔐 Military-Grade Security
 Encryption Pipeline:
 
 text
@@ -68,7 +69,7 @@ Memory zeroing - All passwords cleared from RAM after use
 
 No master password storage - Never persisted, never transmitted
 
-3. 📦 Zero Dependencies
+# 3. 📦 Zero Dependencies
 Unlike other password managers:
 
 Tool	Dependencies	Size
@@ -86,7 +87,7 @@ Portable - runs anywhere Java runs
 
 Fast compilation and startup
 
-4. 💾 Atomic Operations = No Corruption
+# 4. 💾 Atomic Operations = No Corruption
 Atomic Write Process:
 
 1. Write encrypted data to temporary file (.tmp)
@@ -103,15 +104,16 @@ Concurrent access
 
 System crashes
 
-5. 🔑 TOTP 2FA Integration
+# 5. 🔑 TOTP 2FA Integration
 Unique among offline password managers:
 
-# Store TOTP secret
+ Store TOTP secret
 java passwordApp totp add github.com JBSWY3DPEHPK3PXP
 
-# Generate current code
+ Generate current code
 java passwordApp totp code github.com
-# Output: 485927  (refreshes in 23s)
+
+ Output: 485927  (refreshes in 23s)
 Features:
 
 RFC 6238 compliant
@@ -124,7 +126,7 @@ No internet required
 
 Works offline completely
 
-6. 🎲 Advanced Password Generator
+# 6. 🎲 Advanced Password Generator
 Guarantees:
 
 At least one character from each selected character set
@@ -140,7 +142,8 @@ Entropy assessment with strength bands
 $ java passwordApp generate --length 24 --no-ambiguous
 Generated: XkP9$mRq#2wVn@8jHx&3pLz
 Strength: strong (~89 bits of entropy)
-7. 🧠 Smart Clipboard Management
+
+# 7. 🧠 Smart Clipboard Management
 Clipboard Security Flow:
 
 Password Retrieved → Copied to Clipboard → Auto-Cleared (10s)
@@ -154,22 +157,16 @@ Clears by setting empty content
 
 Notifies user throughout process
 
-8. 🏗️ Architecture Benefits
+# 8. 🏗️ Architecture Benefits
 Single Responsibility Design:
 
-text
-┌─────────────────────────────────────────────────┐
-│              PasswordApp.java                   │
-├─────────────────────────────────────────────────┤
-│  Base32    │  CryptoUtil  │  Totp              │
-│  (TOTP)    │  (AES-256)   │  (RFC 6238)        │
-├────────────┼──────────────┼────────────────────┤
-│  Vault     │  Password    │  Password          │
-│  (Storage) │  Generator   │  Strength          │
-├────────────┼──────────────┼────────────────────┤
-│  Clipboard │  Cli (CLI)   │  VaultEntry        │
-│  (System)  │  (Commands)  │  (Data)            │
-└─────────────────────────────────────────────────┘
+## passwordApp.java
+
+| **Base32**<br>TOTP | **CryptoUtil**<br>AES-256 | **Totp**<br>RFC 6238 | 
+|:------------|:-----------------|:----------------------|
+|**Vault**<br>Storage |**Password Generator** | **Password Strength** | 
+| **Clipboard**<br>System | **Cli**<br>Commands | **VaultEntry**<br>Data | |
+
 Benefits:
 
 Easy to understand and modify
@@ -180,7 +177,7 @@ Clear separation of concerns
 
 Type-safe with records
 
-9. 🚀 Performance Optimizations
+# 9. 🚀 Performance Optimizations
 Efficient Operations:
 
 Lazy decryption - Only decrypts when needed
@@ -190,3 +187,15 @@ Memory-mapped reads - Efficient file handling
 Bounds checking - Prevents memory issues (10MB limit)
 
 Fast serialization - Custom binary format, not JSON/XML
+
+📖 Complete Command Reference
+Global Flags
+Flag	Description	Default
+--vault PATH	Primary vault location	~/.vaultic/vault.dat
+--backup-vault PATH	Backup location	~/.vaultic-backup/vault.dat
+--no-backup	Disable backup	Off
+
+# Commands
+
+##
+
